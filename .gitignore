@@ -127,3 +127,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+localdata/
+
+output-data/
+.cache/
+
+.DS_Store
