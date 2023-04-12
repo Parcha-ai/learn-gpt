@@ -8,15 +8,14 @@ chain = learn.ProfessorGPT.build()
 def generate_md():
     md = ""
     with st.spinner("Generating learning hub... (this may take up to a minute)"):
-        # out = chain(
-        #     {
-        #         "goal": st.session_state.goal,
-        #         "reason": st.session_state.reason,
-        #         "knowledge": st.session_state.knowledge,
-        #     }
-        # )
-        # md = out.get("markdown", None)
-        st.session_state.plan = "# hello"
+        out = chain(
+            {
+                "goal": st.session_state.goal,
+                "reason": st.session_state.reason,
+                "knowledge": st.session_state.knowledge,
+            }
+        )
+        md = out.get("markdown", None)
 
 
 def reset():
