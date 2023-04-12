@@ -53,8 +53,8 @@ embeddings_model = OpenAIEmbeddings()
 def prelude_context(goal: str, reason: str, knowledge: str):
     return (
         "You are a professor and tutor. You are generating a learning plan for me as your private student. I want to learn something efficiently and effectively, but have a fixed amount of time they'd like to do so.\n"
-        f"Here is my goal (GOAL): {goal}\n"
-        f"Here is why I want to do this (REASON): {reason}\n"
+        f"Here is my learning goal (GOAL): {goal}\n"
+        f"Here is why I want to learn that (REASON): {reason}\n"
         f"Here is what I already know related to the topic (KNOWLEDGE): {knowledge}\n\n"
     )
 

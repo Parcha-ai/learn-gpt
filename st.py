@@ -28,7 +28,21 @@ if "plan" in st.session_state:
     st.markdown(st.session_state.plan, unsafe_allow_html=True)
 else:
     with st.form(key="learn_form"):
-        st.text_input(label="What do you want to learn?", key="goal")
-        st.text_input(label="Why do you want to learn this?", key="reason")
-        st.text_input(label="What is your current level of knowledge?", key="knowledge")
-        submit = st.form_submit_button(label="Generate", on_click=generate_md)
+        st.text_input(
+            label="What do you want to learn?",
+            placeholder="I want to learn how to golf",
+            key="goal",
+        )
+        st.text_input(
+            label="Why do you want to learn this?",
+            placeholder="To play with my friends on the weekends",
+            key="reason",
+        )
+        st.text_input(
+            label="What is your current level of knowledge?",
+            placeholder="I've played mini golf",
+            key="knowledge",
+        )
+        submit = st.form_submit_button(
+            label="Create learning hub", on_click=generate_md
+        )
