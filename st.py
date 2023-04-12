@@ -6,6 +6,13 @@ chain = learn.ProfessorGPT.build()
 
 
 def generate_md():
+    if (
+        not st.session_state.goal
+        and not st.session_state.reason
+        and not not st.session_state.knowledge
+    ):
+        st.error("Please fill out all fields")
+        return
     md = ""
     with st.spinner("Generating learning hub... (this may take up to a minute)"):
         out = chain(
@@ -16,6 +23,7 @@ def generate_md():
             }
         )
         md = out.get("markdown", None)
+        st.session_state.plan = md
 
 
 def reset():
