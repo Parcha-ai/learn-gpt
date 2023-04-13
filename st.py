@@ -7,9 +7,9 @@ chain = learn.ProfessorGPT.build()
 
 def generate_md():
     if (
-        not st.session_state.goal
-        and not st.session_state.reason
-        and not not st.session_state.knowledge
+        not st.session_state.goal.strip()
+        and not st.session_state.reason.strip()
+        and not st.session_state.knowledge.strip()
     ):
         st.error("Please fill out all fields")
         return
