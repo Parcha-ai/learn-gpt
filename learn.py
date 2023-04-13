@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Dict, List, Any
 from gen_md import gen_markdown
 
@@ -19,6 +20,7 @@ EMBEDDING_SIZE = 1536
 VERBOSE = True
 # MODEL = "gpt-4"
 MODEL = "gpt-3.5-turbo"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 TOPIC = "welding"
 GOAL = "I want to learn how to mig weld within a few days"
@@ -261,6 +263,7 @@ async def get_tasks(
 
 
 class ProfessorGPT(Chain, BaseModel):
+    model: str = MODEL
     subject_creation_chain: SubjectCreationChain = Field(...)
     topic_creation_chain: TopicCreationChain = Field(...)
     subtopic_creation_chain: SubtopicCreationChain = Field(...)
@@ -271,9 +274,13 @@ class ProfessorGPT(Chain, BaseModel):
         arbitrary_types_allowed = True
 
     @staticmethod
-    def build(model=MODEL, verbose=VERBOSE) -> "ProfessorGPT":
-        llm = OpenAI(temperature=TEMPERATURE, model_name=model)
-        return ProfessorGPT.from_llm(llm=llm, verbose=verbose)
+    def build(
+        model=MODEL, verbose=VERBOSE, openai_api_key=OPENAI_API_KEY
+    ) -> "ProfessorGPT":
+        llm = OpenAI(
+            temperature=TEMPERATURE, model_name=model, openai_api_key=openai_api_key
+        )
+        return ProfessorGPT.from_llm(llm=llm, verbose=verbose, model=model)
 
     async def gather_tasks(self, context: str, subtopics: List[Dict]):
         jobs = []
@@ -365,7 +372,9 @@ class ProfessorGPT(Chain, BaseModel):
         subjects = get_subjects(chain=self.subject_creation_chain, context=pc)
         asyncio.run(self.gather_topics(context=pc, subjects=subjects))
 
-        md = gen_markdown(subjects, goal=goal, reason=reason, knowledge=knowledge)
+        md = gen_markdown(
+            subjects, goal=goal, reason=reason, knowledge=knowledge, model=self.model
+        )
         return {"markdown": md}
 
     @property

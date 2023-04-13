@@ -14,8 +14,9 @@ def gen_href(name):
     return f"<a id='{gen_anchor(name)}'></a>"
 
 
-def gen_markdown(data, goal: str, reason: str, knowledge: str):
-    content = "# Learning Hub\n\n"
+def gen_markdown(data, goal: str, reason: str, knowledge: str, model: str):
+    content = "# Learning Hub\n"
+    content += f"(generated with {model})\n\n"
 
     content += "Context:\n"
     content += f"* Stated goal: {goal}\n"

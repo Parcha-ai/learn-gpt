@@ -1,8 +1,16 @@
+import os
 import streamlit as st
 import learn
 
 
-chain = learn.ProfessorGPT.build()
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+model = "gpt-3.5-turbo"
+
+if st.session_state.get("openai_api_key"):
+    openai_api_key = st.session_state.openai_api_key
+    model = "gpt-4"
+
+chain = learn.ProfessorGPT.build(model=model, openai_api_key=openai_api_key)
 
 
 def generate_md():
@@ -14,7 +22,8 @@ def generate_md():
         st.error("Please fill out all fields")
         return
     md = ""
-    with st.spinner("Generating learning hub... (this may take up to a minute)"):
+    with st.spinner("Generating learning hub... "):
+        st.write("(this may take up to a minute, or longer with gpt-4)")
         out = chain(
             {
                 "goal": st.session_state.goal,
@@ -33,6 +42,8 @@ def reset():
 if "plan" in st.session_state:
     st.button(label="Reset", on_click=reset)
     st.markdown(st.session_state.plan, unsafe_allow_html=True)
+    with st.expander("Raw markdown"):
+        st.code(st.session_state.plan, language="text")
 else:
     with st.form(key="learn_form"):
         st.text_input(
@@ -52,4 +63,11 @@ else:
         )
         submit = st.form_submit_button(
             label="Create learning hub", on_click=generate_md
+        )
+        st.divider()
+        st.text_input(
+            label="For gpt-4, please enter your OpenAI API key (never stored!)",
+            placeholder="sk-***",
+            type="password",
+            key="openai_api_key",
         )
