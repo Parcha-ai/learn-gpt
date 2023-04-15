@@ -20,5 +20,5 @@ streamlit run st.py
 
 ## Running a test goal
 ```
-python learn.py
+python gen_plan.py
 ```
