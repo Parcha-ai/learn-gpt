@@ -4,7 +4,7 @@
 # Server
 First, ensure you're using poetry shell
 ```
-poetry install # if necesasry
+poetry install # as needed
 poetry shell
 ```
 
