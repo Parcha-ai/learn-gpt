@@ -1,3 +1,4 @@
+import asyncio
 import os
 import streamlit as st
 import learn
@@ -18,9 +19,15 @@ def generate_md():
     md = ""
     with st.spinner("Generating learning hub... "):
         st.write("(this may take up to a minute, or longer with gpt-4)")
-        md = learn.create_plan(
-            st.session_state.goal, model=model, openai_api_key=openai_api_key
+        plan = asyncio.run(
+            learn.create_plan(
+                st.session_state.goal,
+                model=model,
+                openai_api_key=openai_api_key,
+                verbose=True,
+            )
         )
+        md = learn.gen_plan_md(plan, model=model)
         st.session_state.plan = md
 
 

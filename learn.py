@@ -1,21 +1,14 @@
 import asyncio
 import json
 import os
-import re
 
+from util import fix_json, load_malformed_json
 from pathlib import Path
 from typing import Dict, List, Any
-
 from pydantic import BaseModel, parse_obj_as
 from langchain import LLMChain, PromptTemplate
 from langchain.llms import BaseLLM
 from langchain.chat_models import ChatOpenAI
-
-TEMPERATURE = 0
-VERBOSE = True
-# MODEL = "gpt-4"
-MODEL = "gpt-3.5-turbo"
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 
 PROMPTS_DIR = Path(__file__).parent
@@ -76,23 +69,6 @@ ROOT_SUBJECT_TASK = (
 GEN_SUBJECTS_TASK = "Provide a list of subjects that the user should learn in order to achieve the above goal along with a description of the subject and reason why that subject is important."
 
 
-llm = ChatOpenAI(
-    model_name=MODEL,
-    openai_api_key=OPENAI_API_KEY,
-    temperature=TEMPERATURE,
-    verbose=VERBOSE,
-)
-
-
-def fix_json(s: str) -> str:
-    s = s.replace("\n", "")
-    return re.sub(r",(?=\s*[\]}])", "", s)
-
-
-def load_json(s: str) -> Dict[str, Any]:
-    return json.loads(fix_json(s))
-
-
 class Resource(BaseModel):
     title: str
     description: str
@@ -151,7 +127,7 @@ async def ask_for_answer(chain: SimpleChain, question: str, plan: Plan) -> str:
     output = await chain.arun(prompt=prompt, return_only_outputs=True)
     if VERBOSE:
         print("raw output:", output)
-    data = load_json(output)
+    data = load_malformed_json(output)
     return data["answer"]
 
 
@@ -175,7 +151,7 @@ async def add_subjects_and_topics(chain: SimpleChain, subject: Subject, plan: Pl
     output = await chain.arun(prompt=prompt, return_only_outputs=True)
     if VERBOSE:
         print("raw output:", output)
-    data = load_json(output)
+    data = load_malformed_json(output)
     if "subjects" in data:
         subject.subjects = parse_obj_as(List[Subject], data["subjects"])
 
@@ -189,7 +165,7 @@ async def add_resources_and_exercises(chain: SimpleChain, subject: Subject, plan
     output = await chain.arun(prompt=prompt, return_only_outputs=True)
     if VERBOSE:
         print("raw output:", output)
-    data = load_json(output)
+    data = load_malformed_json(output)
     if "resources" in data:
         subject.resources = parse_obj_as(List[Resource], data["resources"])
     if "exercises" in data:
@@ -271,7 +247,7 @@ def gen_subject_md(subject: Subject, level: int) -> str:
     return content
 
 
-def gen_plan_md(plan: Plan, model: str = MODEL):
+def gen_plan_md(plan: Plan, model: str):
     root = plan.subject
     content = f"# Learning Hub: {root.subject}\n"
     content += f"(generated with {model})\n\n"
@@ -281,23 +257,41 @@ def gen_plan_md(plan: Plan, model: str = MODEL):
     return content.strip() + "\n"
 
 
+async def create_plan(
+    goal: str,
+    model: str,
+    openai_api_key,
+    verbose: bool,
+) -> str:
+    llm = ChatOpenAI(model_name=model, openai_api_key=openai_api_key, verbose=verbose)
+    chain = SimpleChain.from_llm(llm, verbose=verbose)
+    return await generate_full_plan(chain, goal=goal)
+
+
+def fake_plan() -> Plan:
+    with open("examples/nn_plan.json", "r") as f:
+        return Plan.parse_raw(f.read())
+
+
+TEMPERATURE = 0
+VERBOSE = True
+# MODEL = "gpt-4"
+MODEL = "gpt-3.5-turbo"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 # GOAL = "I want to learn how to code neural networks. I want to be able to code FCN, FNN, CNNs and GANs by hand using pytorch, but also understand the math. I am an expert in python already and have a rough knowledge of linear algebra and statistics."
 # GOAL = "I want to learn tic-tac-toe"
 GOAL = "I want to how to code a hello world in Python"
 
 
-def create_plan(
-    goal: str,
-    model: str = MODEL,
-    openai_api_key: str = OPENAI_API_KEY,
-    verbose: bool = VERBOSE,
-) -> str:
-    llm = ChatOpenAI(model_name=model, openai_api_key=openai_api_key, verbose=verbose)
-    chain = SimpleChain.from_llm(llm, verbose=verbose)
-    plan = asyncio.run(generate_full_plan(chain, goal=goal))
+def main():
+    plan = asyncio.run(
+        create_plan(
+            goal=GOAL, model=MODEL, openai_api_key=OPENAI_API_KEY, verbose=VERBOSE
+        )
+    )
     print(plan.json(indent=4))
-    return gen_plan_md(plan)
+    print(gen_plan_md(plan, model=MODEL))
 
 
 if __name__ == "__main__":
-    print(create_plan(goal=GOAL))
+    main()
