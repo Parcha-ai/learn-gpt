@@ -1,7 +1,7 @@
 import os
 import asyncio
 
-from learn import create_plan, get_plan_md
+from app.learn import create_plan, get_plan_md
 
 
 TEMPERATURE = 0
