@@ -1,29 +1,30 @@
 import React, { useState } from "react";
-import { Box, Button, Heading, Text } from "@chakra-ui/react";
+import { Button, Text, VStack } from "@chakra-ui/react";
 
-const Exercises = ({ exercises }) => {
+const Exercises = ({ exercises, hasExercises }) => {
   const [showExercises, setShowExercises] = useState(false);
 
+  if (!hasExercises || exercises.length === 0) {
+    return null;
+  }
+
   return (
-    <Box>
+    <VStack align="start" spacing={2} pt={4}>
       <Button
-        variant="outline"
         colorScheme="purple"
+        variant="outline"
         size="sm"
         onClick={() => setShowExercises(!showExercises)}
       >
-        {showExercises ? "Hide" : "Show"} Exercises
+        {showExercises ? "Hide Exercises" : "Show Exercises"}
       </Button>
-      {showExercises && (
-        <Box mt={2} pl={4}>
-          {exercises.map((exercise, index) => (
-            <Box key={index} mt={2}>
-              <Text color="white">{exercise.description}</Text>
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Box>
+      {showExercises &&
+        exercises.map((exercise, index) => (
+          <Text key={index} color="white">
+            {exercise.description}
+          </Text>
+        ))}
+    </VStack>
   );
 };
 
