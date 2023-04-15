@@ -4,6 +4,9 @@ import Resources from "./Resources";
 import Exercises from "./Exercises";
 
 const Subject = ({ data }) => {
+  const hasResources = data.resources && data.resources.length > 0;
+  const hasExercises = data.exercises && data.exercises.length > 0;
+
   return (
     <VStack align="start" spacing={4}>
       <Heading color="white" size="md">
@@ -11,8 +14,12 @@ const Subject = ({ data }) => {
       </Heading>
       <Text color="white">{data.description}</Text>
       <Text color="white">{data.reason}</Text>
-      <Resources resources={data.resources} />
-      <Exercises exercises={data.exercises} />
+      {hasResources && (
+        <Resources resources={data.resources} hasResources={hasResources} />
+      )}
+      {hasExercises && (
+        <Exercises exercises={data.exercises} hasExercises={hasExercises} />
+      )}
       {data.subjects &&
         data.subjects.map((nestedSubject, index) => (
           <Box key={index} pl={4}>
