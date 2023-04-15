@@ -1,0 +1,12 @@
+Your role: {ai_role}
+
+Your user's goal: {user_goal}
+
+Your task: {ai_task}
+
+{constraints}
+
+You should only respond in JSON format as described below:
+{json_response_format}
+
+Provide the JSON and nothing more.

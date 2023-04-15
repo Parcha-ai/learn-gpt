@@ -10,28 +10,17 @@ if st.session_state.get("openai_api_key"):
     openai_api_key = st.session_state.openai_api_key
     model = "gpt-4"
 
-chain = learn.ProfessorGPT.build(model=model, openai_api_key=openai_api_key)
-
 
 def generate_md():
-    if (
-        not st.session_state.goal.strip()
-        and not st.session_state.reason.strip()
-        and not st.session_state.knowledge.strip()
-    ):
+    if not st.session_state.goal.strip():
         st.error("Please fill out all fields")
         return
     md = ""
     with st.spinner("Generating learning hub... "):
         st.write("(this may take up to a minute, or longer with gpt-4)")
-        out = chain(
-            {
-                "goal": st.session_state.goal,
-                "reason": st.session_state.reason,
-                "knowledge": st.session_state.knowledge,
-            }
+        md = learn.create_plan(
+            st.session_state.goal, model=model, openai_api_key=openai_api_key
         )
-        md = out.get("markdown", None)
         st.session_state.plan = md
 
 
@@ -46,20 +35,10 @@ if "plan" in st.session_state:
         st.code(st.session_state.plan, language="text")
 else:
     with st.form(key="learn_form"):
-        st.text_input(
-            label="What do you want to learn?",
-            placeholder="I want to learn how to golf",
+        st.text_area(
+            label="What do you want to learn? Be specific and also explain why and what your current level of knowledge is.",
+            placeholder="I want to learn how to code neural networks. I want to be able to code FCN, FNN, CNNs and GANs by hand using pytorch, but also understand the math. I am an expert in python already and have a rough knowledge of linear algebra and statistics",
             key="goal",
-        )
-        st.text_input(
-            label="Why do you want to learn this?",
-            placeholder="To play with my friends on the weekends",
-            key="reason",
-        )
-        st.text_input(
-            label="What is your current level of knowledge?",
-            placeholder="I've played mini golf",
-            key="knowledge",
         )
         submit = st.form_submit_button(
             label="Create learning hub", on_click=generate_md

@@ -1,427 +1,303 @@
 import asyncio
+import json
 import os
+import re
+
+from pathlib import Path
 from typing import Dict, List, Any
-from gen_md import gen_markdown
 
-from pydantic import BaseModel, Field
-from langchain import LLMChain, OpenAI, PromptTemplate
-from langchain.embeddings import OpenAIEmbeddings
+from pydantic import BaseModel, parse_obj_as
+from langchain import LLMChain, PromptTemplate
 from langchain.llms import BaseLLM
-from langchain.chains.base import Chain
 from langchain.chat_models import ChatOpenAI
-import langchain
-
-print(langchain.__file__, langchain.__version__)
-
-# TODO(d): refactor this to recursively build topics/subtopics and simplify the code
 
 TEMPERATURE = 0
-EMBEDDING_SIZE = 1536
 VERBOSE = True
 # MODEL = "gpt-4"
 MODEL = "gpt-3.5-turbo"
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-TOPIC = "welding"
-GOAL = "I want to learn how to mig weld within a few days"
-REASON = "I want to be able to weld metal together for my professional projects"
-KNOWLEDGE = "I am a professional cabinet maker and I am familiar with tig welding. I need to learn how to mig weld for my projects."
+
+PROMPTS_DIR = Path(__file__).parent
+
+JSON_TASK_PROMPT = PromptTemplate.from_file(
+    PROMPTS_DIR / "prompt.txt",
+    ["ai_role", "user_goal", "ai_task", "constraints", "json_response_format"],
+)
 
 
-# TOPIC = "neural_networks"
-# GOAL = ("I want to learn how to code neural networks.",)
-# REASON = (
-#     "I want to be able to code FCN, FNN, CNNs and GANs by hand using pytorch, but also understand the math.",
-# )
-# KNOWLEDGE = (
-#     "I am an expert in python already and have a rough knowledge of linear algebra and statistics.",
-# )
-
-# TOPIC = "golf"
-# GOAL = "I want to learn how to golf"
-# REASON = "I want to be able to play golf with my friends on the weekends"
-# KNOWLEDGE = "I know very little about golf. I've only caddyed once."
+def format_numbered_list(items: List[str]):
+    return "\n".join([f"{i+1}. {item}" for i, item in enumerate(items)])
 
 
-# TOPIC = "chess"
-# GOAL = "I want to become a 2000 ELO rated chess player"
-# REASON = "I want to be able to beat all of my friends and compete in tournaments"
-# KNOWLEDGE = "I am an intermediate chess player, rated at 1200 so I already know the basics and tactics."
+AI_ROLE = "You are a professor and a tutor. Your role is to create a custom curriculum and course for your user to achieve a goal. Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and pursue simple strategies with no legal complications."
+CONSTRAINTS = format_numbered_list(
+    [
+        "~4000 word limit for short term memory. Your short term memory is short, so immediately save important information to files.",
+        "No user assistance",
+        'Refer to the user in the second person as "you"',
+    ]
+)
 
+SUBJECTS_AND_TOPICS = "subjects/topics"
+RESOURCES_AND_EXERCISES = "resources/exercises"
 
-embeddings_model = OpenAIEmbeddings()
-
-
-def prelude_context(goal: str, reason: str, knowledge: str):
-    return (
-        "You are a professor and tutor. You are generating a learning plan for me as your private student. I want to learn something efficiently and effectively, but have a fixed amount of time they'd like to do so.\n"
-        f"Here is my learning goal (GOAL): {goal}\n"
-        f"Here is why I want to learn that (REASON): {reason}\n"
-        f"Here is what I already know related to the topic (KNOWLEDGE): {knowledge}\n\n"
-    )
-
-
-def enumerate_items(items: List[Dict]) -> str:
-    return "\n".join([f"{s['id']}. {s['title']}" for s in items]) + "\n"
-
-
-def subjects_context(subjects: List[Dict]) -> str:
-    return (
-        "Here are the high-level subjects you previously told me to focus on:\n"
-        + enumerate_items(subjects)
-        + "\n\n"
-    )
-
-
-def topics_context(subject_id: int, subject_title: str, topics: List[Dict]) -> str:
-    return (
-        f'And for the subject #{subject_id} "{subject_title}", here are the topics you came up with for me to learn:\n'
-        + enumerate_items(topics)
-        + "\n\n"
-    )
-
-
-def subtopics_context(topic_id: int, topic_title: str, subtopics: List[Dict]) -> str:
-    return (
-        f'And for the topic #{topic_id} "{topic_title}", here are the subtopics you came up with for me to learn:\n'
-        + enumerate_items(subtopics)
-        + "\n\n"
-    )
-
-
-def split_at(text: str, sep: str) -> tuple:
-    index = text.find(sep)
-    return (text[:index], text[index + 1 :]) if index != -1 else (text, "")
-
-
-def parse_items(response: str, split_desc=True) -> List[Dict]:
-    items = []
-    for line in response.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        num, content = split_at(line, ".")
-        if not content:
-            print(f"skipped response line: {line}")
-            continue
-        try:
-            id = int(num)
-        except ValueError:
-            print(f"skipped response line: {line}")
-            continue
-        id = int(num)
-        if split_desc:
-            title, desc = (
-                split_at(content, ":") if ":" in content else split_at(content, "-")
-            )
-        else:
-            title = content
-            desc = ""
-        items.append(
-            {
-                "id": id,
-                "title": title.strip(),
-                "desc": desc.strip(),
-            }
-        )
-    return items
-
-
-class SubjectCreationChain(LLMChain):
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
-        template = (
-            "{context}"
-            + "Based on that, enumerate a list of high-level subjects that I should learn to reach that GOAL based on the REASON. With each subject, write 3-6 sentences why each is important. Each subject should take less than 2 weeks each to get a general understanding of. These should be relatively high-level. Please say a couple sentences why each is important. Later, I will ask you for topics related to each subject, and then sub-topics and tasks related to those topics."
-            " Return the result as a numbered list like the following:\n"
-            "1. First subject\n"
-            "2. Second subject\n"
-        )
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=[
-                "context",
-            ],
-        )
-        return cls(prompt=prompt, llm=llm, verbose=verbose)
-
-
-class TopicCreationChain(LLMChain):
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
-        template = (
-            "{context}"
-            + 'Enumerate a list of topics for subject #{subject_id} "{subject_title}" with 3-6 sentences explaining why each is important.'
-            " These topics should be in service of the specified GOAL and REASON. Each topic should take less than 3 days to get an understanding of."
-            " Return the result as a numbered list like the following:\n"
-            "1. First topic\n"
-            "2. Second topic"
-        )
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=[
-                "context",
-                "subject_id",
-                "subject_title",
-            ],
-        )
-        return cls(prompt=prompt, llm=llm, verbose=verbose)
-
-
-class SubtopicCreationChain(LLMChain):
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
-        template = (
-            "{context}"
-            + 'Enumerate a list of sub-topics that I should do to understand the topic #{topic_id} "{topic_title}" with 3-5 sentences explaining why it\'s important.'
-            " The sub-topics should be in service of the specified GOAL and REASON. Each sub-topic should take less than 1 day to understand (for example, it shouldn't be to read an entire book), they shouldn't be too broad. Return the result as a numbered list like the following:"
-            " Return the result as a numbered list like the following:\n"
-            "1. First\n"
-            "2. Second"
-        )
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=[
-                "context",
-                "topic_id",
-                "topic_title",
-            ],
-        )
-        return cls(prompt=prompt, llm=llm, verbose=verbose)
-
-
-class TaskCreationChain(LLMChain):
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
-        template = (
-            "{context}"
-            + 'Enumerate a list of 1-4 tasks (no more than 4) that I should do to understand the sub-topic #{subtopic_id} "{subtopic_title}".'
-            " The tasks should be in service of the specified GOAL and REASON. Each task should take less than 4 hours to understand (for example, it shouldn't be to read an entire book), they shouldn't be too broad. Return the result as a numbered list like the following:"
-            " Return the result as a numbered list like the following:\n"
-            "1. First\n"
-            "2. Second"
-        )
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=[
-                "context",
-                "subtopic_id",
-                "subtopic_title",
-            ],
-        )
-        return cls(prompt=prompt, llm=llm, verbose=verbose)
-
-
-def get_subjects(
-    chain: SubjectCreationChain,
-    context: str,
-) -> List[Dict]:
-    response = chain.run(context=context)
-    return parse_items(response)
-
-
-async def get_topics(
-    chain: TopicCreationChain,
-    context: str,
-    subject_id: int,
-    subject_title: str,
-) -> List[Dict]:
-    response = await chain.arun(
-        context=context,
-        subject_id=subject_id,
-        subject_title=subject_title,
-    )
-    return parse_items(response)
-
-
-async def get_subtopics(
-    chain: SubtopicCreationChain,
-    context: str,
-    topic_id: int,
-    topic_title: str,
-) -> List[Dict]:
-    response = await chain.arun(
-        context=context,
-        topic_id=topic_id,
-        topic_title=topic_title,
-    )
-    return parse_items(response)
-
-
-async def get_tasks(
-    chain: TaskCreationChain,
-    context: str,
-    subtopic_id: int,
-    subtopic_title: str,
-) -> List[Dict]:
-    response = await chain.arun(
-        context=context,
-        subtopic_id=subtopic_id,
-        subtopic_title=subtopic_title,
-    )
-    return parse_items(response, split_desc=False)
-
-
-class ProfessorGPT(Chain, BaseModel):
-    model: str = MODEL
-    subject_creation_chain: SubjectCreationChain = Field(...)
-    topic_creation_chain: TopicCreationChain = Field(...)
-    subtopic_creation_chain: SubtopicCreationChain = Field(...)
-    task_creation_chain: TaskCreationChain = Field(...)
-    task_id_counter: int = Field(1)
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    @staticmethod
-    def build(
-        model=MODEL, verbose=VERBOSE, openai_api_key=OPENAI_API_KEY
-    ) -> "ProfessorGPT":
-        llm = OpenAI(
-            temperature=TEMPERATURE, model_name=model, openai_api_key=openai_api_key
-        )
-        return ProfessorGPT.from_llm(llm=llm, verbose=verbose, model=model)
-
-    async def gather_tasks(self, context: str, subtopics: List[Dict]):
-        jobs = []
-        for subtopic in subtopics:
-            if "desc" in subtopic and subtopic["desc"]:
-                job = asyncio.create_task(
-                    get_tasks(
-                        chain=self.task_creation_chain,
-                        context=context,
-                        subtopic_id=subtopic["id"],
-                        subtopic_title=subtopic["title"],
-                    )
-                )
-                jobs.append(job)
-        tasks = await asyncio.gather(*jobs)
-        for subtopic, subtopic_tasks in zip(subtopics, tasks):
-            subtopic["tasks"] = subtopic_tasks
-
-    async def gather_subtopics(self, context: str, topics: List[Dict]):
-        jobs = []
-        for topic in topics:
-            job = asyncio.create_task(
-                get_subtopics(
-                    chain=self.subtopic_creation_chain,
-                    context=context,
-                    topic_id=topic["id"],
-                    topic_title=topic["title"],
-                )
-            )
-            jobs.append(job)
-        subtopics = await asyncio.gather(*jobs)
-
-        jobs = []
-        for topic, topic_subtopics in zip(topics, subtopics):
-            topic["subtopics"] = topic_subtopics
-            tc = context + subtopics_context(
-                topic["id"], topic["title"], topic_subtopics
-            )
-            jobs.append(
-                asyncio.create_task(
-                    self.gather_tasks(
-                        context=tc,
-                        subtopics=topic_subtopics,
-                    )
-                )
-            )
-        await asyncio.gather(*jobs)
-
-    async def gather_topics(self, context: str, subjects: List[Dict]):
-        sc = context + subjects_context(subjects)
-        jobs = []
-        for subject in subjects:
-            job = asyncio.create_task(
-                get_topics(
-                    chain=self.topic_creation_chain,
-                    context=sc,
-                    subject_id=subject["id"],
-                    subject_title=subject["title"],
-                )
-            )
-            jobs.append(job)
-        topics = await asyncio.gather(*jobs)
-
-        jobs = []
-        for subject, subject_topics in zip(subjects, topics):
-            subject["topics"] = subject_topics
-            tc = context + topics_context(
-                subject["id"], subject["title"], subject_topics
-            )
-            jobs.append(
-                asyncio.create_task(
-                    self.gather_subtopics(
-                        context=tc,
-                        topics=subject_topics,
-                    )
-                )
-            )
-        await asyncio.gather(*jobs)
-
-    def _call(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        goal = inputs["goal"]
-        reason = inputs["reason"]
-        knowledge = inputs["knowledge"]
-        pc = prelude_context(
-            goal=inputs["goal"],
-            reason=inputs["reason"],
-            knowledge=inputs["knowledge"],
-        )
-        subjects = get_subjects(chain=self.subject_creation_chain, context=pc)
-        asyncio.run(self.gather_topics(context=pc, subjects=subjects))
-
-        md = gen_markdown(
-            subjects, goal=goal, reason=reason, knowledge=knowledge, model=self.model
-        )
-        return {"markdown": md}
-
-    @property
-    def input_keys(self) -> List[str]:
-        return ["goal", "reason", "knowledge"]
-
-    @property
-    def output_keys(self) -> List[str]:
-        return ["markdown"]
-
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False, **kwargs) -> "ProfessorGPT":
-        subject_creation_chain = SubjectCreationChain.from_llm(llm=llm, verbose=verbose)
-        topic_creation_chain = TopicCreationChain.from_llm(llm=llm, verbose=verbose)
-        subtopic_creation_chain = SubtopicCreationChain.from_llm(
-            llm=llm, verbose=verbose
-        )
-        task_creation_chain = TaskCreationChain.from_llm(llm=llm, verbose=verbose)
-        return cls(
-            subject_creation_chain=subject_creation_chain,
-            topic_creation_chain=topic_creation_chain,
-            subtopic_creation_chain=subtopic_creation_chain,
-            task_creation_chain=task_creation_chain,
-            **kwargs,
-        )
-
-    def next_task_id(self):
-        this_id = self.task_id_counter
-        self.task_id_counter += 1
-        return this_id
-
-
-def run(goal: str, reason: str, knowledge: str):
-    llm = ChatOpenAI(temperature=TEMPERATURE, model_name=MODEL)
-    professor_gpt = ProfessorGPT.from_llm(llm=llm, verbose=VERBOSE)
-    out = professor_gpt(
+ANSWER_JSON = {
+    "answer": "answer",
+}
+ANSWER_RESPONSE_FORMAT = json.dumps(ANSWER_JSON, indent=4)
+SUBJECT_JSON = {
+    "subject": "subject",
+    "description": "description",
+    "reason": "reason",
+}
+SUBJECT_RESPONSE_FORMAT = json.dumps(SUBJECT_JSON, indent=4)
+SUBJECT_LIST_RESPONSE_FORMAT = json.dumps(
+    {"subjects": [SUBJECT_JSON]},
+    indent=4,
+)
+RESOURCES_AND_EXERCISES_FORMAT = """{
+    "resources": [
         {
-            "goal": goal,
-            "reason": reason,
-            "knowledge": knowledge,
+            "title": "resource title",
+            "description": "resource description"
         }
+    ],
+    "exercises": [
+        {
+          "description": "exercise description"
+        }
+    ]
+}
+"""
+ROOT_SUBJECT_TASK = (
+    "Provide exactly one subject title based on what the user wants to learn."
+)
+GEN_SUBJECTS_TASK = "Provide a list of subjects that the user should learn in order to achieve the above goal along with a description of the subject and reason why that subject is important."
+
+
+llm = ChatOpenAI(
+    model_name=MODEL,
+    openai_api_key=OPENAI_API_KEY,
+    temperature=TEMPERATURE,
+    verbose=VERBOSE,
+)
+
+
+def fix_json(s: str) -> str:
+    s = s.replace("\n", "")
+    return re.sub(r",(?=\s*[\]}])", "", s)
+
+
+def load_json(s: str) -> Dict[str, Any]:
+    return json.loads(fix_json(s))
+
+
+class Resource(BaseModel):
+    title: str
+    description: str
+
+
+class Exercise(BaseModel):
+    description: str
+
+
+class Subject(BaseModel):
+    subject: str
+    description: str = ""
+    reason: str = ""
+    subjects: List["Subject"] = []
+    resources: List[Resource] = []
+    exercises: List[Exercise] = []
+
+
+class Plan(BaseModel):
+    goal: str
+    subject: Subject
+
+
+class SimpleChain(LLMChain):
+    @classmethod
+    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
+        template = "{prompt}"
+        pt = PromptTemplate(
+            template=template,
+            input_variables=[
+                "prompt",
+            ],
+        )
+        return cls(prompt=pt, llm=llm, verbose=verbose)
+
+
+def create_json_prompt(goal: str, task: str, response_format: str) -> str:
+    prompt = JSON_TASK_PROMPT.format(
+        ai_role=AI_ROLE,
+        user_goal=goal,
+        ai_task=task,
+        constraints=CONSTRAINTS,
+        json_response_format=response_format,
     )
-    return out.get("markdown", None)
+    return prompt
+
+
+async def ask_for_answer(chain: SimpleChain, question: str, plan: Plan) -> str:
+    task = (
+        f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n"
+    )
+    task += question
+    prompt = create_json_prompt(
+        goal=plan.goal, task=task, response_format=ANSWER_RESPONSE_FORMAT
+    )
+    output = await chain.arun(prompt=prompt, return_only_outputs=True)
+    if VERBOSE:
+        print("raw output:", output)
+    data = load_json(output)
+    return data["answer"]
+
+
+async def ask_for_subject(chain: SimpleChain, goal: str) -> Subject:
+    prompt = create_json_prompt(
+        goal=goal, task=ROOT_SUBJECT_TASK, response_format=SUBJECT_RESPONSE_FORMAT
+    )
+    output = await chain.arun(prompt=prompt, return_only_outputs=True)
+    if VERBOSE:
+        print("raw output:", output)
+    output = fix_json(output)
+    return Subject.parse_raw(output)
+
+
+async def add_subjects_and_topics(chain: SimpleChain, subject: Subject, plan: Plan):
+    task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
+    task += f'Provide a list of subjects (sub-topics) related to "{subject.subject}" that the user should learn in order to achieve the above goal along with a description of the topic and reason why that topic is important.'
+    prompt = create_json_prompt(
+        goal=plan.goal, task=task, response_format=SUBJECT_LIST_RESPONSE_FORMAT
+    )
+    output = await chain.arun(prompt=prompt, return_only_outputs=True)
+    if VERBOSE:
+        print("raw output:", output)
+    data = load_json(output)
+    if "subjects" in data:
+        subject.subjects = parse_obj_as(List[Subject], data["subjects"])
+
+
+async def add_resources_and_exercises(chain: SimpleChain, subject: Subject, plan: Plan):
+    task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
+    task += f'Generate a list of resources and exercises for the user to learn about the subject "{subject.subject}". If it does not make sense to add either resources or exercises, leave it empty.'
+    prompt = create_json_prompt(
+        goal=plan.goal, task=task, response_format=RESOURCES_AND_EXERCISES_FORMAT
+    )
+    output = await chain.arun(prompt=prompt, return_only_outputs=True)
+    if VERBOSE:
+        print("raw output:", output)
+    data = load_json(output)
+    if "resources" in data:
+        subject.resources = parse_obj_as(List[Resource], data["resources"])
+    if "exercises" in data:
+        subject.exercises = parse_obj_as(List[Exercise], data["exercises"])
+
+
+async def process_subject(chain: SimpleChain, subject: Subject, plan: Plan, depth: int):
+    answer = ""
+    if depth < 3:
+        question = f'For the user to learn about the subject "{subject.subject}" is this subject large or important enough to be broken down into discrete topics or should the user go straight to resources and exercises? Answer with either "topics" or "{RESOURCES_AND_EXERCISES}" below'
+        answer = await ask_for_answer(chain, question=question, plan=plan)
+
+    if answer == "topics":
+        await add_subjects_and_topics(chain, subject=subject, plan=plan)
+        tasks = []
+        for child_subject in subject.subjects:
+            task = asyncio.create_task(
+                process_subject(
+                    chain=chain,
+                    subject=child_subject,
+                    plan=plan,
+                    depth=depth + 1,
+                )
+            )
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+    else:
+        await add_resources_and_exercises(chain, subject=subject, plan=plan)
+
+
+async def generate_full_plan(chain: SimpleChain, goal: str) -> Plan:
+    subject = await ask_for_subject(chain=chain, goal=goal)
+    plan = Plan(goal=goal, subject=subject)
+    await process_subject(chain=chain, subject=plan.subject, plan=plan, depth=1)
+    return plan
+
+
+def gen_anchor(name):
+    return name.lower().replace(" ", "-")
+
+
+def gen_md_link(name, label=None):
+    label = label or name
+    return f"[{label}](#{gen_anchor(name)})"
+
+
+def gen_href(name):
+    return f"<a id='{gen_anchor(name)}'></a>"
+
+
+def gen_toc_md(subject: Subject, level: int) -> str:
+    indent = "  " * level
+    content = f"{indent} * {gen_md_link(subject.subject)}\n"
+    if subject.subjects:
+        for child_subject in subject.subjects:
+            content += gen_toc_md(child_subject, level + 1)
+    return content
+
+
+def gen_subject_md(subject: Subject, level: int) -> str:
+    header_prefix = "#" * level
+    anchor = gen_href(subject.subject)
+    content = f"{header_prefix} {subject.subject}{anchor}\n"
+    content += f"{subject.description}\n\n"
+    content += f"{subject.reason}\n\n"
+    if subject.subjects:
+        for child_subject in subject.subjects:
+            content += gen_subject_md(child_subject, level + 1)
+    if subject.resources:
+        anchor = gen_href(subject.subject + "_resources")
+        content += f"{header_prefix}# Resources{anchor}\n"
+        for resource in subject.resources:
+            content += f"* {resource.title}: {resource.description}\n"
+    if subject.exercises:
+        anchor = gen_href(subject.subject + "_exercises")
+        content += f"{header_prefix}# Exercises{anchor}\n"
+        for exercise in subject.exercises:
+            content += f"* {exercise.description}\n"
+    return content
+
+
+def gen_plan_md(plan: Plan, model: str = MODEL):
+    root = plan.subject
+    content = f"# Learning Hub: {root.subject}\n"
+    content += f"(generated with {model})\n\n"
+    content += f"> {plan.goal}\n\n"
+    content += f"{gen_toc_md(subject=root, level=0)}\n\n"
+    content += gen_subject_md(subject=root, level=1)
+    return content.strip() + "\n"
+
+
+# GOAL = "I want to learn how to code neural networks. I want to be able to code FCN, FNN, CNNs and GANs by hand using pytorch, but also understand the math. I am an expert in python already and have a rough knowledge of linear algebra and statistics."
+# GOAL = "I want to learn tic-tac-toe"
+GOAL = "I want to how to code a hello world in Python"
+
+
+def create_plan(
+    goal: str,
+    model: str = MODEL,
+    openai_api_key: str = OPENAI_API_KEY,
+    verbose: bool = VERBOSE,
+) -> str:
+    llm = ChatOpenAI(model_name=model, openai_api_key=openai_api_key, verbose=verbose)
+    chain = SimpleChain.from_llm(llm, verbose=verbose)
+    plan = asyncio.run(generate_full_plan(chain, goal=goal))
+    print(plan.json(indent=4))
+    return gen_plan_md(plan)
 
 
 if __name__ == "__main__":
-    md = run(goal=GOAL, reason=REASON, knowledge=KNOWLEDGE)
-    if md:
-        with open(f"./examples/{TOPIC}_plan.md", "w") as f:
-            f.write(md)
+    print(create_plan(goal=GOAL))
