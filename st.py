@@ -1,7 +1,8 @@
 import asyncio
 import os
 import streamlit as st
-import learn
+
+from app import learn
 
 
 openai_api_key = os.environ.get("OPENAI_API_KEY")

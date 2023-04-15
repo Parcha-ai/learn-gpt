@@ -9,9 +9,9 @@ from langchain import LLMChain, PromptTemplate
 from langchain.llms import BaseLLM
 from langchain.chat_models import ChatOpenAI
 
-import store
-from model import Subject, Resource, Plan, Exercise
-from util import fix_json, load_malformed_json
+from app import store
+from app.model import Subject, Resource, Plan, Exercise
+from app.util import fix_json, load_malformed_json
 
 
 PROMPTS_DIR = Path(__file__).parent

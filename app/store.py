@@ -2,11 +2,10 @@ import os
 import uuid
 from typing import List
 
-from pydantic import BaseModel, Field
 from tinydb import TinyDB
 from tinydb.table import Table, Document
 
-from model import Plan
+from app.model import Plan
 
 
 class _Table(Table):
