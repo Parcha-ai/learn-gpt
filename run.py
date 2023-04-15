@@ -3,7 +3,9 @@ import json
 
 from typing import Dict, List
 from quart import Quart, request, jsonify
+
 from learn import create_plan, fake_plan
+import store
 
 app = Quart(__name__)
 
@@ -28,6 +30,18 @@ async def create_plan():
     plan = create_plan(
         goal=goal, model=model, openai_api_key=openai_api_key, verbose=True
     )
+    return jsonify({"plan": json.loads(plan.json())})
+
+
+@app.route("/v1/get_plan", methods=["POST"])
+async def get_plan():
+    data = await request.json
+    if data.get("fake", False):
+        return jsonify({"plan": json.loads(fake_plan().json())})
+    id = data.get("id")
+    if not id:
+        return bad_request("goal not provided")
+    plan = store.get_plan(id)
     return jsonify({"plan": json.loads(plan.json())})
 
 

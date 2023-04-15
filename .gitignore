@@ -128,8 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-localdata/
-
+local-data/
 output-data/
 .cache/
 

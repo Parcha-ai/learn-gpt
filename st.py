@@ -27,7 +27,7 @@ def generate_md():
                 verbose=True,
             )
         )
-        md = learn.gen_plan_md(plan, model=model)
+        md = learn.get_plan_md(plan, model=model)
         st.session_state.plan = md
 
 
