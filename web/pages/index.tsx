@@ -1,34 +1,21 @@
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Button,
-  Heading,
   Input,
   Container,
   FormLabel,
   InputGroup,
   Spinner,
 } from "@chakra-ui/react";
+import LearnHeader from "../components/LearnHeader";
 import Subject from "../components/Subject";
 import { createPlan } from "../api/PlanAPI";
 
-const Header = () => (
-  <Heading
-    mt={4}
-    mb={4}
-    textAlign="center"
-    color="white"
-    fontWeight={700}
-    fontSize={18}
-  >
-    <a href="#">Learn</a>
-  </Heading>
-);
-
 const Learn = () => {
-  const [learnDescription, setLearnDescription] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [json, setJson] = React.useState(null);
+  const [learnDescription, setLearnDescription] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [json, setJson] = useState(null);
 
   const handleCreatePlan = async () => {
     setIsLoading(true);
@@ -36,7 +23,7 @@ const Learn = () => {
       const response = await createPlan({
         goal: learnDescription,
       });
-      setJson(response.data.plan);
+      setJson(response);
     } catch (error) {
       console.error("Error in creating plan:", error);
     } finally {
@@ -46,28 +33,25 @@ const Learn = () => {
 
   return (
     <Container p={4} maxW="container.md">
-      <Header />
+      <LearnHeader />
       <FormLabel mt={12} px={[0, 10]}>
         <InputGroup
           background="linear-gradient(268.17deg, #0C0B20 6.09%, #2D2A3D 82.17%)"
           borderRadius={10}
         >
           <Input
-            shadow="rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.2) 0px 5px 10px 0px, rgba(0, 0, 0, 0.4) 0px 15px 40px 0px"
             bg="whiteAlpha.50"
-            size="lg"
-            px={6}
-            py={6}
-            borderRadius={10}
-            required
+            borderColor="#75758B"
+            borderRadius="10px"
+            boxShadow="0px 4px 20px #33313A"
             color="white"
             placeholder="What do you want to learn?"
+            px={6}
+            py={6}
+            required
+            shadow="rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.2) 0px 5px 10px 0px, rgba(0, 0, 0, 0.4) 0px 15px 40px 0px"
+            size="lg"
             value={learnDescription}
-            style={{
-              border: "1px solid #75758B",
-              boxShadow: "0px 4px 20px #33313A",
-              borderRadius: "10px",
-            }}
             _focus={{
               background: "#2E2A3D",
             }}
@@ -86,34 +70,34 @@ const Learn = () => {
       </FormLabel>
       <Box display="flex" justifyContent="center" mt={12}>
         <Button
-          colorScheme="purple"
-          color="white"
-          hidden={json !== null}
-          borderRadius={8}
           bg="#6C70C2"
-          size="xl"
+          borderRadius={8}
+          color="white"
+          colorScheme="purple"
+          fontWeight={300}
+          hidden={json !== null}
+          isDisabled={!learnDescription}
           p={3.5}
           px={7}
-          isDisabled={!learnDescription}
-          onClick={() => handleCreatePlan()}
-          fontWeight={300}
+          size="xl"
           textTransform="uppercase"
+          onClick={() => handleCreatePlan()}
         >
           {isLoading ? <Spinner size="xs" color="white" /> : "Go"}
         </Button>
 
         <Button
-          colorScheme="purple"
-          color="white"
-          hidden={json === null}
-          borderRadius={8}
           bg="#6C70C2"
-          size="xl"
+          borderRadius={8}
+          color="white"
+          colorScheme="purple"
+          fontWeight={300}
+          hidden={json === null}
           p={3.5}
           px={7}
-          onClick={(e) => setJson(null)}
-          fontWeight={300}
+          size="xl"
           textTransform="uppercase"
+          onClick={(e) => setJson(null)}
         >
           Clear
         </Button>
@@ -122,17 +106,14 @@ const Learn = () => {
         <Box
           background="linear-gradient(268.17deg, #0C0B20 6.09%, #2D2A3D 82.17%)"
           borderRadius={10}
-          p={4}
-          w="full"
+          boxShadow="0px 4px 20px #33313A"
           maxW="container.xl"
           mx="auto"
-          style={{
-            boxShadow: "0px 4px 20px #33313A",
-            borderRadius: "10px",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            overflowX: "auto",
-          }}
+          overflowX="auto"
+          p={4}
+          w="full"
+          whiteSpace="pre-wrap"
+          wordBreak="break-word"
         >
           <Subject data={json.subject} />
         </Box>

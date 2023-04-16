@@ -8,13 +8,15 @@ const Exercises = ({ exercises, hasExercises }) => {
     return null;
   }
 
+  const toggleExercises = () => setShowExercises(!showExercises);
+
   return (
     <VStack align="start" spacing={2} pt={4}>
       <Button
         colorScheme="purple"
         variant="outline"
         size="sm"
-        onClick={() => setShowExercises(!showExercises)}
+        onClick={toggleExercises}
       >
         {showExercises ? "Hide Exercises" : "Show Exercises"}
       </Button>

@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 
-const instance: AxiosInstance = axios.create({
+const client: AxiosInstance = axios.create({
   baseURL: "http://localhost:5001",
   timeout: 60000, // gpt requests can take a long time :)
   headers: {
@@ -8,4 +8,4 @@ const instance: AxiosInstance = axios.create({
   },
 });
 
-export default instance;
+export default client;
