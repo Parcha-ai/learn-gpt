@@ -10,7 +10,7 @@ poetry shell
 
 ## Running the server
 ```
-python run.py
+python app/run.py
 ```
 
 ## Running local streamlit
@@ -18,9 +18,9 @@ python run.py
 streamlit run st.py
 ```
 
-## Running a test goal
+## Creating a local test plan and output it
 ```
-python gen_plan.py
+python scripts/create_plan.py
 ```
 
 ### CURL requests
