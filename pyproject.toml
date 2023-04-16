@@ -17,6 +17,7 @@ flask = "^2.2.3"
 quart = "^0.18.4"
 quart-cors = "^0.6.0"
 tinydb = "^4.7.1"
+quart-schema = "^0.15.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
