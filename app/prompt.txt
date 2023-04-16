@@ -1,5 +1,3 @@
-Your role: {ai_role}
-
 Your user's goal: {user_goal}
 
 Your task: {ai_task}

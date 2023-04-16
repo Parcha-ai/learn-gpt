@@ -4,21 +4,22 @@ import uuid
 
 from pathlib import Path
 from typing import Dict, List, Any
-from pydantic import BaseModel, Field, parse_obj_as, validator
+from pydantic import BaseModel, Field, parse_obj_as
 from langchain import LLMChain, PromptTemplate
 from langchain.llms import BaseLLM
 from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
 
 from app import store
 from app.model import Subject, Resource, Plan, Exercise
-from app.util import fix_json, load_malformed_json
+from app.util import load_malformed_json
 
 
 PROMPTS_DIR = Path(__file__).parent
 
 JSON_TASK_PROMPT = PromptTemplate.from_file(
     PROMPTS_DIR / "prompt.txt",
-    ["ai_role", "user_goal", "ai_task", "constraints", "json_response_format"],
+    ["user_goal", "ai_task", "constraints", "json_response_format"],
 )
 
 
@@ -29,7 +30,6 @@ def format_numbered_list(items: List[str]):
 AI_ROLE = "You are a professor and a tutor. Your role is to create a custom curriculum and course for your user to achieve a goal. Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and pursue simple strategies with no legal complications."
 CONSTRAINTS = format_numbered_list(
     [
-        "~4000 word limit for short term memory. Your short term memory is short, so immediately save important information to files.",
         "No user assistance",
         'Refer to the user in the second person as "you"',
     ]
@@ -85,15 +85,16 @@ class SimpleChain(LLMChain):
         return cls(prompt=pt, llm=llm, verbose=verbose)
 
 
-def create_json_prompt(goal: str, task: str, response_format: str) -> str:
+async def execute(llm: ChatOpenAI, goal: str, task: str, response_format: str) -> str:
     prompt = JSON_TASK_PROMPT.format(
-        ai_role=AI_ROLE,
         user_goal=goal,
         ai_task=task,
         constraints=CONSTRAINTS,
         json_response_format=response_format,
     )
-    return prompt
+    msgs = [SystemMessage(content=AI_ROLE), HumanMessage(content=prompt)]
+    r = await llm.agenerate([msgs])
+    return r.generations[0][0].text
 
 
 class Planner(BaseModel):
@@ -131,10 +132,9 @@ class Planner(BaseModel):
     async def _add_subjects_and_topics(self, subject: Subject, plan: Plan):
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
         task += f'Provide a list of subjects (sub-topics) related to "{subject.subject}" that the user should learn in order to achieve the above goal along with a description of the topic and reason why that topic is important.'
-        prompt = create_json_prompt(
-            goal=plan.goal, task=task, response_format=SUBJECT_LIST_RESPONSE_FORMAT
+        output = await execute(
+            self.chain.llm, plan.goal, task, SUBJECT_LIST_RESPONSE_FORMAT
         )
-        output = await self.chain.arun(prompt=prompt, return_only_outputs=True)
         if self.verbose:
             print("raw output:", output)
         data = load_malformed_json(output)
@@ -142,10 +142,9 @@ class Planner(BaseModel):
             subject.subjects = parse_obj_as(List[Subject], data["subjects"])
 
     async def _ask_for_subject(self, goal: str) -> Subject:
-        prompt = create_json_prompt(
-            goal=goal, task=ROOT_SUBJECT_TASK, response_format=SUBJECT_RESPONSE_FORMAT
+        output = await execute(
+            self.chain.llm, goal, ROOT_SUBJECT_TASK, SUBJECT_RESPONSE_FORMAT
         )
-        output = await self.chain.arun(prompt=prompt, return_only_outputs=True)
         if self.verbose:
             print("raw output:", output)
         data = load_malformed_json(output)
@@ -154,10 +153,9 @@ class Planner(BaseModel):
     async def _add_resources_and_exercises(self, subject: Subject, plan: Plan):
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
         task += f'Generate a list of resources and exercises for the user to learn about the subject "{subject.subject}". If it does not make sense to add either resources or exercises, leave it empty.'
-        prompt = create_json_prompt(
-            goal=plan.goal, task=task, response_format=RESOURCES_AND_EXERCISES_FORMAT
+        output = await execute(
+            self.chain.llm, plan.goal, task, RESOURCES_AND_EXERCISES_FORMAT
         )
-        output = await self.chain.arun(prompt=prompt, return_only_outputs=True)
         if self.verbose:
             print("raw output:", output)
         data = load_malformed_json(output)
@@ -169,10 +167,7 @@ class Planner(BaseModel):
     async def _ask_for_answer(self, question: str, plan: Plan) -> str:
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n"
         task += question
-        prompt = create_json_prompt(
-            goal=plan.goal, task=task, response_format=ANSWER_RESPONSE_FORMAT
-        )
-        output = await self.chain.arun(prompt=prompt, return_only_outputs=True)
+        output = await execute(self.chain.llm, plan.goal, task, ANSWER_RESPONSE_FORMAT)
         if self.verbose:
             print("raw output:", output)
         data = load_malformed_json(output)
