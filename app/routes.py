@@ -4,6 +4,7 @@ import json
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 from quart import Quart, request, jsonify
+from quart_cors import cors
 from quart_schema import QuartSchema, validate_request, validate_response
 
 from app import store
@@ -12,6 +13,7 @@ from app.model import Plan
 
 app = Quart(__name__)
 QuartSchema(app)
+app = cors(app, allow_origin="http://localhost:3000")  # for development, remove/adjust in production
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 DEFAULT_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -33,9 +35,9 @@ class CreatePlanResponse(BaseModel):
 
 @app.route("/v1/create_plan", methods=["POST"])
 @validate_request(CreatePlanRequest)
-@validate_response(CreatePlanResponse)
-async def create_plan(data: CreatePlanRequest):
-    plan = create_plan(
+# @validate_response(CreatePlanResponse)
+async def create_plan_route(data: CreatePlanRequest):
+    plan = await create_plan(
         goal=data.goal,
         model=data.model or DEFAULT_MODEL,
         openai_api_key=data.openai_api_key or DEFAULT_OPENAI_API_KEY,
