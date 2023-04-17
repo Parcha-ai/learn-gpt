@@ -12,12 +12,13 @@ import {
 } from "@chakra-ui/react";
 import LearnHeader from "../components/LearnHeader";
 import Plan from "../components/Plan";
+import { Plan as PlanData } from "../api/PlanAPI";
 import { createPlan } from "../api/PlanAPI";
 
 const Learn = () => {
   const [learnDescription, setLearnDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [json, setJson] = useState(null);
+  const [json, setJson] = useState<PlanData | null>(null);
 
   const handleCreatePlan = async () => {
     setIsLoading(true);
@@ -25,7 +26,7 @@ const Learn = () => {
       const response = await createPlan({
         goal: learnDescription,
       });
-      // setJson(response);
+      setJson(response);
     } catch (error) {
       console.error("Error in creating plan:", error);
     } finally {

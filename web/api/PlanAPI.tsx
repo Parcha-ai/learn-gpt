@@ -1,6 +1,6 @@
 import axiosClient from "./Client";
 
-interface Plan {
+export interface Plan {
   goal: string;
   subject: string;
   subjects: Plan[];
