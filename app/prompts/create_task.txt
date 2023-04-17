@@ -1,0 +1,6 @@
+Your task: {task}
+
+You should only respond in JSON format as described below:
+{json_response_format}
+
+Provide the JSON and nothing more.

@@ -9,30 +9,29 @@ from langchain import LLMChain, PromptTemplate
 from langchain.llms import BaseLLM
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
+from langchain.prompts.chat import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 
 from app import store
 from app.model import Subject, Resource, Plan, Exercise
 from app.util import load_malformed_json
+from app.log import print_text
 
 
-PROMPTS_DIR = Path(__file__).parent
+PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-JSON_TASK_PROMPT = PromptTemplate.from_file(
-    PROMPTS_DIR / "prompt.txt",
-    ["user_goal", "ai_task", "constraints", "json_response_format"],
+
+AI_ROLE_PROMPT = PromptTemplate.from_file(
+    PROMPTS_DIR / "ai_role.txt",
+    ["user_goal"],
 )
 
-
-def format_numbered_list(items: List[str]):
-    return "\n".join([f"{i+1}. {item}" for i, item in enumerate(items)])
-
-
-AI_ROLE = "You are a professor and a tutor. Your role is to create a custom curriculum and course for your user to achieve a goal. Your decisions must always be made independently without seeking user assistance. Play to your strengths as an LLM and pursue simple strategies with no legal complications."
-CONSTRAINTS = format_numbered_list(
-    [
-        "No user assistance",
-        'Refer to the user in the second person as "you"',
-    ]
+CREATE_TASK_PROMPT = PromptTemplate.from_file(
+    PROMPTS_DIR / "create_task.txt",
+    ["task", "json_response_format"],
 )
 
 SUBJECTS_AND_TOPICS = "subjects/topics"
@@ -72,34 +71,16 @@ ROOT_SUBJECT_TASK = (
 GEN_SUBJECTS_TASK = "Provide a list of subjects that the user should learn in order to achieve the above goal along with a description of the subject and reason why that subject is important."
 
 
-class SimpleChain(LLMChain):
-    @classmethod
-    def from_llm(cls, llm: BaseLLM, verbose: bool = False) -> LLMChain:
-        template = "{prompt}"
-        pt = PromptTemplate(
-            template=template,
-            input_variables=[
-                "prompt",
-            ],
-        )
-        return cls(prompt=pt, llm=llm, verbose=verbose)
-
-
-async def execute(llm: ChatOpenAI, goal: str, task: str, response_format: str) -> str:
-    prompt = JSON_TASK_PROMPT.format(
-        user_goal=goal,
-        ai_task=task,
-        constraints=CONSTRAINTS,
-        json_response_format=response_format,
-    )
-    msgs = [SystemMessage(content=AI_ROLE), HumanMessage(content=prompt)]
-    r = await llm.agenerate([msgs])
-    return r.generations[0][0].text
-
-
 class Planner(BaseModel):
-    chain: SimpleChain = Field(...)
+    chain: LLMChain = Field(...)
     verbose: bool = False
+
+    async def give_task(self, task: str, json_response_format: str) -> str:
+        return await self.chain.arun(
+            task=task,
+            json_response_format=json_response_format,
+            return_only_outputs=True,
+        )
 
     async def generate(self, goal: str) -> Plan:
         subject = await self._ask_for_subject(goal=goal)
@@ -132,8 +113,9 @@ class Planner(BaseModel):
     async def _add_subjects_and_topics(self, subject: Subject, plan: Plan):
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
         task += f'Provide a list of subjects (sub-topics) related to "{subject.subject}" that the user should learn in order to achieve the above goal along with a description of the topic and reason why that topic is important.'
-        output = await execute(
-            self.chain.llm, plan.goal, task, SUBJECT_LIST_RESPONSE_FORMAT
+        output = await self.give_task(
+            task=task,
+            json_response_format=SUBJECT_LIST_RESPONSE_FORMAT,
         )
         if self.verbose:
             print("raw output:", output)
@@ -142,8 +124,9 @@ class Planner(BaseModel):
             subject.subjects = parse_obj_as(List[Subject], data["subjects"])
 
     async def _ask_for_subject(self, goal: str) -> Subject:
-        output = await execute(
-            self.chain.llm, goal, ROOT_SUBJECT_TASK, SUBJECT_RESPONSE_FORMAT
+        output = await self.give_task(
+            task=ROOT_SUBJECT_TASK,
+            json_response_format=SUBJECT_RESPONSE_FORMAT,
         )
         if self.verbose:
             print("raw output:", output)
@@ -153,8 +136,9 @@ class Planner(BaseModel):
     async def _add_resources_and_exercises(self, subject: Subject, plan: Plan):
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n\n"
         task += f'Generate a list of resources and exercises for the user to learn about the subject "{subject.subject}". If it does not make sense to add either resources or exercises, leave it empty.'
-        output = await execute(
-            self.chain.llm, plan.goal, task, RESOURCES_AND_EXERCISES_FORMAT
+        output = await self.give_task(
+            task=task,
+            json_response_format=RESOURCES_AND_EXERCISES_FORMAT,
         )
         if self.verbose:
             print("raw output:", output)
@@ -167,7 +151,10 @@ class Planner(BaseModel):
     async def _ask_for_answer(self, question: str, plan: Plan) -> str:
         task = f"Remember the subjects you've already been provided:\n{plan.subject.json()}\n"
         task += question
-        output = await execute(self.chain.llm, plan.goal, task, ANSWER_RESPONSE_FORMAT)
+        output = await self.give_task(
+            task=task,
+            json_response_format=ANSWER_RESPONSE_FORMAT,
+        )
         if self.verbose:
             print("raw output:", output)
         data = load_malformed_json(output)
@@ -180,8 +167,15 @@ async def create_plan(
     openai_api_key,
     verbose: bool,
 ) -> Plan:
-    llm = ChatOpenAI(model_name=model, openai_api_key=openai_api_key, verbose=verbose)
-    chain = SimpleChain.from_llm(llm, verbose=verbose)
+    chat = ChatOpenAI(model_name=model, openai_api_key=openai_api_key, verbose=verbose)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessage(content=AI_ROLE_PROMPT.format(user_goal=goal)),
+            HumanMessagePromptTemplate(prompt=CREATE_TASK_PROMPT),
+        ]
+    )
+
+    chain = LLMChain(llm=chat, prompt=prompt, verbose=verbose)
     planner = Planner(chain=chain, verbose=verbose)
     plan = await planner.generate(goal=goal)
     store.save_plan(plan)

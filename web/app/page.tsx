@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from "react";
 import {
   Box,
@@ -9,7 +11,7 @@ import {
   Spinner,
 } from "@chakra-ui/react";
 import LearnHeader from "../components/LearnHeader";
-import Subject from "../components/Subject";
+import Plan from "../components/Plan";
 import { createPlan } from "../api/PlanAPI";
 
 const Learn = () => {
@@ -23,7 +25,7 @@ const Learn = () => {
       const response = await createPlan({
         goal: learnDescription,
       });
-      setJson(response);
+      // setJson(response);
     } catch (error) {
       console.error("Error in creating plan:", error);
     } finally {
@@ -102,22 +104,7 @@ const Learn = () => {
           Clear
         </Button>
       </Box>
-      {json && (
-        <Box
-          background="linear-gradient(268.17deg, #0C0B20 6.09%, #2D2A3D 82.17%)"
-          borderRadius={10}
-          boxShadow="0px 4px 20px #33313A"
-          maxW="container.xl"
-          mx="auto"
-          overflowX="auto"
-          p={4}
-          w="full"
-          whiteSpace="pre-wrap"
-          wordBreak="break-word"
-        >
-          <Subject data={json.subject} />
-        </Box>
-      )}
+      {json && <Plan plan={json} />}
     </Container>
   );
 };

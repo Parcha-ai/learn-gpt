@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { Box, Heading, Text, VStack } from "@chakra-ui/react";
 import Resources from "./Resources";

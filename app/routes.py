@@ -13,7 +13,9 @@ from app.model import Plan
 
 app = Quart(__name__)
 QuartSchema(app)
-app = cors(app, allow_origin="http://localhost:3000")  # for development, remove/adjust in production
+app = cors(
+    app, allow_origin="http://localhost:3000"
+)  # for development, remove/adjust in production
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 DEFAULT_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -56,14 +58,13 @@ class GetPlanResponse(BaseModel):
 
 @app.route("/v1/get_plan", methods=["POST"])
 @validate_request(GetPlanRequest)
-@validate_response(GetPlanResponse)
 async def get_plan(data: GetPlanRequest):
     # data = await request.json
     if data.id == "fake":
         return jsonify({"plan": json.loads(fake_plan().json())})
     plan = store.get_plan(data.id)
-    return GetPlanResponse(plan=plan)
-    # return jsonify({"plan": json.loads(plan.json())})
+    # return GetPlanResponse(plan=plan)
+    return jsonify({"plan": json.loads(plan.json())})
 
 
 @app.after_request
