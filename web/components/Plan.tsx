@@ -1,6 +1,4 @@
-"use client";
-
-import React, { useState } from "react";
+import React from "react";
 import { Box } from "@chakra-ui/react";
 import Subject from "../components/Subject";
 

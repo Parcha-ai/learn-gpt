@@ -1,5 +1,3 @@
-"use client";
-
 import { Heading } from "@chakra-ui/react";
 
 const LearnHeader = () => (
