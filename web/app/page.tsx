@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import {
   Box,
-  Button,
   Input,
   Container,
   FormLabel,
@@ -35,51 +34,46 @@ const Learn = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [planData, setPlanData] = useState<PlanData | null>(null);
 
-  const handleTypingEffect = (message: Message) => {
+  const handleSystemMessage = (text: string) => {
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
-      setMessages((prevMessages) => [...prevMessages, message]);
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { type: "system", text: text },
+      ]);
     }, 2000);
   };
 
-  const handleCreatePlan = async () => {
-    if (isLoading) return;
-
+  const handleConversation = async () => {
     if (inputMessage.trim() === "") return;
+    if (isLoading) return;
 
     setMessages([...messages, { type: "user", text: inputMessage }]);
 
-    setIsLoading(true);
-    handleTypingEffect({
-      type: "system",
-      text: "Ok, let me work on that...",
-    });
-
     if (!planData) {
       try {
+        setIsLoading(true);
+        handleSystemMessage("Ok, let me work on that...");
+
         const plan = await createPlan({
           goal: inputMessage,
         });
         setPlanData(plan);
-        handleTypingEffect({
-          type: "system",
-          text: "Are you happy with the plan or do you need more help?",
-        });
+
+        handleSystemMessage(
+          "Are you happy with the plan or do you want me to change it?"
+        );
       } catch (error) {
         console.error("Error in creating plan:", error);
-        handleTypingEffect({
-          type: "system",
-          text: "Sorry, something went wrong. Please try again later.",
-        });
+        handleSystemMessage(
+          "Sorry, something went wrong. Please try again later."
+        );
       } finally {
         setIsLoading(false);
       }
     } else {
-      handleTypingEffect({
-        type: "system",
-        text: "Thank you for your feedback. We will improve the learning plan.",
-      });
+      handleSystemMessage("Thank you for your feedback. Let me try again...");
       setIsLoading(false);
     }
 
@@ -160,7 +154,7 @@ const Learn = () => {
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    handleCreatePlan();
+                    handleConversation();
                     setInputMessage("");
                   }
                 }}
