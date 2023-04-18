@@ -9,103 +9,186 @@ import {
   FormLabel,
   InputGroup,
   Spinner,
+  VStack,
+  HStack,
+  Text,
+  Flex,
 } from "@chakra-ui/react";
 import LearnHeader from "../components/LearnHeader";
 import Plan from "../components/Plan";
+import TypingIndicator from "../components/TypingIndicator";
 import { Plan as PlanData } from "../api/PlanAPI";
 import { createPlan } from "../api/PlanAPI";
 
+type Message = {
+  type: "user" | "system";
+  text: string;
+};
+
 const Learn = () => {
-  const [learnDescription, setLearnDescription] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    { type: "system", text: "What do you want to learn?" },
+  ]);
+
+  const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [json, setJson] = useState<PlanData | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [planData, setPlanData] = useState<PlanData | null>(null);
+
+  const handleTypingEffect = (message: Message) => {
+    setIsTyping(true);
+    setTimeout(() => {
+      setIsTyping(false);
+      setMessages((prevMessages) => [...prevMessages, message]);
+    }, 2000);
+  };
 
   const handleCreatePlan = async () => {
+    if (isLoading) return;
+
+    if (inputMessage.trim() === "") return;
+
+    setMessages([...messages, { type: "user", text: inputMessage }]);
+
     setIsLoading(true);
-    try {
-      const response = await createPlan({
-        goal: learnDescription,
+    handleTypingEffect({
+      type: "system",
+      text: "Ok, let me work on that...",
+    });
+
+    if (!planData) {
+      try {
+        const plan = await createPlan({
+          goal: inputMessage,
+        });
+        setPlanData(plan);
+        handleTypingEffect({
+          type: "system",
+          text: "Are you happy with the plan or do you need more help?",
+        });
+      } catch (error) {
+        console.error("Error in creating plan:", error);
+        handleTypingEffect({
+          type: "system",
+          text: "Sorry, something went wrong. Please try again later.",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      handleTypingEffect({
+        type: "system",
+        text: "Thank you for your feedback. We will improve the learning plan.",
       });
-      setJson(response);
-    } catch (error) {
-      console.error("Error in creating plan:", error);
-    } finally {
       setIsLoading(false);
     }
+
+    setInputMessage("");
   };
 
   return (
-    <Container p={4} maxW="container.md">
+    <Container p={4} maxW="container.xl">
       <LearnHeader />
-      <FormLabel mt={12} px={[0, 10]}>
-        <InputGroup
-          background="linear-gradient(268.17deg, #0C0B20 6.09%, #2D2A3D 82.17%)"
-          borderRadius={10}
+      <Flex>
+        <Box
+          flex={1}
+          borderWidth="1px"
+          borderColor="#75758B"
+          borderRadius="10px"
+          p={4}
         >
-          <Input
-            bg="whiteAlpha.50"
-            borderColor="#75758B"
-            borderRadius="10px"
-            boxShadow="0px 4px 20px #33313A"
-            color="white"
-            placeholder="What do you want to learn?"
-            px={6}
-            py={6}
-            required
-            shadow="rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.2) 0px 5px 10px 0px, rgba(0, 0, 0, 0.4) 0px 15px 40px 0px"
-            size="lg"
-            value={learnDescription}
-            _focus={{
-              background: "#2E2A3D",
-            }}
-            _hover={{
-              background: "#2E2A3D",
-            }}
-            onChange={(e) => setLearnDescription(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleCreatePlan();
-                (e.target as any).blur();
-              }
-            }}
-          />
-        </InputGroup>
-      </FormLabel>
-      <Box display="flex" justifyContent="center" mt={12}>
-        <Button
-          bg="#6C70C2"
-          borderRadius={8}
-          color="white"
-          colorScheme="purple"
-          fontWeight={300}
-          hidden={json !== null}
-          isDisabled={!learnDescription}
-          p={3.5}
-          px={7}
-          size="xl"
-          textTransform="uppercase"
-          onClick={() => handleCreatePlan()}
-        >
-          {isLoading ? <Spinner size="xs" color="white" /> : "Go"}
-        </Button>
+          <VStack
+            mt={12}
+            px={[0, 10]}
+            spacing={4}
+            width="100%"
+            height="50vh"
+            overflowY="auto"
+          >
+            {messages.map((message, index) => (
+              <HStack
+                key={index}
+                alignSelf={message.type === "user" ? "flex-end" : "flex-start"}
+                bg={message.type === "user" ? "#6C70C2" : "#A3A6CC"}
+                borderRadius={8}
+                color="white"
+                p={3.5}
+                px={5}
+              >
+                <Text>{message.text}</Text>
+              </HStack>
+            ))}
 
-        <Button
-          bg="#6C70C2"
-          borderRadius={8}
-          color="white"
-          colorScheme="purple"
-          fontWeight={300}
-          hidden={json === null}
-          p={3.5}
-          px={7}
-          size="xl"
-          textTransform="uppercase"
-          onClick={(e) => setJson(null)}
+            {isTyping && (
+              <HStack
+                alignSelf="flex-start"
+                bg="#A3A6CC"
+                borderRadius={8}
+                color="white"
+                p={3.5}
+                px={5}
+              >
+                <TypingIndicator />
+              </HStack>
+            )}
+          </VStack>
+          <FormLabel mt={12} px={[0, 10]}>
+            <InputGroup
+              background="linear-gradient(268.17deg, #0C0B20 6.09%, #2D2A3D 82.17%)"
+              borderRadius={10}
+            >
+              <Input
+                bg="whiteAlpha.50"
+                borderColor="#75758B"
+                borderRadius="10px"
+                boxShadow="0px 4px 20px #33313A"
+                color="white"
+                placeholder="Type your message here..."
+                px={6}
+                py={6}
+                required
+                shadow="rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.2) 0px 5px 10px 0px, rgba(0, 0, 0, 0.4) 0px 15px 40px 0px"
+                size="lg"
+                isDisabled={isLoading}
+                value={inputMessage}
+                _focus={{
+                  background: "#2E2A3D",
+                }}
+                _hover={{
+                  background: "#2E2A3D",
+                }}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCreatePlan();
+                    setInputMessage("");
+                  }
+                }}
+              />
+            </InputGroup>
+          </FormLabel>
+        </Box>
+        <Box
+          flex={1}
+          borderWidth="1px"
+          borderColor="#75758B"
+          borderRadius="10px"
+          position="relative"
+          p={4}
         >
-          Clear
-        </Button>
-      </Box>
-      {json && <Plan plan={json} />}
+          {isLoading && (
+            <Spinner
+              position="absolute"
+              top="50%"
+              left="50%"
+              transform="translate(-50%, -50%)"
+              size="xl"
+              color="#6C70C2"
+            />
+          )}
+          {planData && <Plan plan={planData} />}
+        </Box>
+      </Flex>
     </Container>
   );
 };
