@@ -1,3 +1,4 @@
+"use client";
 import { Container } from "@chakra-ui/react";
 
 import Plan from "../../../components/Plan";
